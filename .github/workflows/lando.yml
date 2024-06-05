@@ -1,0 +1,86 @@
+name: CI/CD for Drupal on Acquia with Lando
+on:
+  push:
+    tags:
+      - '**'
+  pull_request:
+    branches:
+      - develop
+      - master
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.ref }}
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -t rsa example.com >> ~/.ssh/known_hosts  # Replace example.com with your SSH host
+    - name: Cache Lando
+      id: cache-lando
+      uses: actions/cache@v3
+      with:
+        path: ~/lando
+        key: ${{ runner.os }}-lando-${{ hashFiles('**/lando/config.yml') }}
+        restore-keys: ${{ runner.os }}-lando-
+    - name: Setup Lando
+      if: steps.cache-lando.outputs.cache-hit != 'true'
+      uses: lando/setup-lando@v3
+    - name: Start Lando
+      run: lando start
+    - name: Cache Composer dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.composer/cache
+        key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+        restore-keys: ${{ runner.os }}-composer-
+    - name: Install Composer dependencies
+      run: lando composer install
+    - name: Set up local.settings.php
+      run: |
+        lando sh -c "cat << EOF >> sites/default/local.settings.php
+        <?php
+        \$databases['default']['default'] = array (
+          'database' => 'drupal',
+          'username' => 'drupal',
+          'password' => 'drupal',
+          'host' => 'database',
+          'port' => '3306',
+          'driver' => 'mysql',
+          'prefix' => '',
+        );
+        EOF"
+    - name: Sync Acquia Production Database
+      env:
+        ACQUIA_SITE: ${{ secrets.ACQUIA_SITE }}
+      run: lando drush sql-sync @${{ env.ACQUIA_SITE }}.prod @self --yes
+    - name: Update database and import config
+      run: |
+        lando drush updb --yes
+        lando drush cim --yes
+        lando drush cim --yes
+    - name: Check config status
+      run: |
+        if ! lando drush config:status 2>&1 | grep "No differences"; then
+          echo "Configuration differences found" >&2
+          exit 1
+        fi
+    - name: Run frontend install script
+      run: lando sh ./scripts/frontend_install.sh
+    - name: Run frontend compile script
+      run: lando sh ./scripts/frontend_compile.sh
+    - name: Deploy to Acquia
+      env:
+        ACQUIA_KEY: ${{ secrets.ACQUIA_KEY }}
+        ACQUIA_SECRET: ${{ secrets.ACQUIA_SECRET }}
+        ACQUIA_SITE: ${{ secrets.ACQUIA_SITE }}
+      run: |
+        lando acli auth:login --key $ACQUIA_KEY --secret $ACQUIA_SECRET
+        lando acli push:code @self @${{ env.ACQUIA_SITE }}.dev --yes
+    - name: Cleanup
+      run: lando stop
