@@ -1,0 +1,120 @@
+name: CI Deploy
+
+description: Deploys single sites
+
+inputs:
+  ACQUIA_APP_NAME:
+    description: Acquia app name
+    required: true
+  ACQUIA_API_KEY:
+    description: Acquia api key
+    required: true
+  ACQUIA_API_SECRET:
+    description: Acquia api secret
+    required: true
+  ACQUIA_ENV:
+    description: Acquia env to deploy to
+    required: true
+  ACQUIA_GIT_URL:
+    description: Acquia git url
+    required: true
+  APPNAME:
+    description: Name of app being built
+    required: true
+  RELEASE:
+    description: Release to deploy
+    required: true
+  DEPLOY_ID_RSA:
+    description: Acquia deploy key
+    required: true
+  DRUSH_CIM_SOURCE:
+    description: End path for `drush cim` source arg e.g. `/var/www/html/${ACQUIA_ALIAS}/${DRUSH_CIM_SOURCE}`
+    default: "config"
+    required: false
+  TOKEN:
+    description: Automatically generated github token for repo this workflow is being run from
+    required: true
+  CACHE_CLEAR:
+    description: Clear Acquia cache
+    default: "false"
+    required: false
+
+runs:
+  using: "composite"
+  steps:
+    - name: Cancel Previous Runs
+      uses: styfle/cancel-workflow-action@0.5.0
+      with:
+        access_token: ${{ inputs.TOKEN }}
+
+    - name: Install Deploy SSH key
+      uses: webfactory/ssh-agent@v0.5.4
+      with:
+        ssh-private-key: ${{ inputs.DEPLOY_ID_RSA }}
+      if: ${{ inputs.APPNAME }} != "SITE"
+
+    - name: Checkout tagname-deploy branch
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ inputs.RELEASE }}-deploy
+        token: ${{ inputs.TOKEN }}
+        fetch-depth: 0
+
+    - name: Push build artifacts into Acquia tagname-deploy-branch
+      shell: bash
+      run: |
+        echo $GITHUB_ENV
+        git remote add acquia ${{ inputs.ACQUIA_GIT_URL }}
+        git config core.sshCommand 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no'
+        git push acquia ${{ inputs.RELEASE }}-deploy
+
+    - name: Install Acquia CLI and login
+      run: |
+        curl -OL https://github.com/acquia/cli/releases/download/1.30.1/acli.phar
+        chmod +x acli.phar
+        ./acli.phar auth:login --no-interaction --key=${{ inputs.ACQUIA_API_KEY }} --secret=${{ inputs.ACQUIA_API_SECRET }}
+      shell: bash
+
+    - name: Deploy code to desired env on Acquia using Acquia CLI/API
+      run: |
+        DEPLOY_BRANCH="${{ inputs.RELEASE }}-deploy"
+        ACQUIA_ALIAS="${{ inputs.ACQUIA_APP_NAME }}.${{ inputs.ACQUIA_ENV }}"
+        echo "Deploying ${DEPLOY_BRANCH} to ${ACQUIA_ALIAS}"
+        # Switch to pushed tagname-deploy branch on specified env
+        # TODO: add check to ensure ${ACQUIA_ALIAS} is in ./acli.phar remote:aliases:list
+        NOTIFICATION=$(./acli.phar api:environments:code-switch --no-interaction ${ACQUIA_ALIAS} ${DEPLOY_BRANCH} | jq -r '.notification')
+        # Check code switch status and sleep for a short time to prevent a
+        # race condition where drush runs before the Acquia API finishes the
+        # code-switch
+        T=$(date +%s)
+        INTERVAL=15
+        TIMEOUT=600
+        while
+          echo
+          [[ $(($(date +%s) - $T)) -gt ${TIMEOUT} ]] && echo "Code switch timeout exceeded. Aborting without running drush commands" && exit 1
+          echo "Checking code switch status"
+          JSON=$(./acli.phar api:notifications:find ${NOTIFICATION})
+          STAT=$(jq -r '.status' <<< "${JSON}")
+          PROG=$(jq -r '.progress' <<< "${JSON}")
+          echo "Code switch status and progress: ${STAT}, ${PROG}%"
+          [[ ${STAT} != "completed" ]] && echo "Sleeping ${INTERVAL} seconds..."
+        do sleep ${INTERVAL}; done
+      shell: bash
+      if: ${{ inputs.APPNAME }} != "SITE"
+
+    - name: Post-deploy config import, cache clear, db update
+      run: |
+        ACQUIA_ALIAS="${{ inputs.ACQUIA_APP_NAME }}.${{ inputs.ACQUIA_ENV }}"
+        ./acli.phar remote:drush ${ACQUIA_ALIAS} updatedb -- -y --no-cache-clear
+        ./acli.phar remote:drush ${ACQUIA_ALIAS} cache:rebuild
+        ./acli.phar remote:drush ${ACQUIA_ALIAS} config:import -- -y --source /var/www/html/${ACQUIA_ALIAS}/${{ inputs.DRUSH_CIM_SOURCE }}
+        ./acli.phar remote:drush ${ACQUIA_ALIAS} cache:rebuild
+        ./acli.phar remote:drush ${ACQUIA_ALIAS} deploy:hook
+        if [ ${{ inputs.CACHE_CLEAR }} ]; then
+          DOMAINS=$(./acli.phar api:environments:domain-list ${ACQUIA_ALIAS} | jq '.[].hostname' | sed 's/"//g')
+          for D in $DOMAINS; do
+            ./acli.phar api:environments:clear-caches ${ACQUIA_ALIAS} ${D}
+          done
+        fi
+      shell: bash
+      if: ${{ inputs.APPNAME }} != "SITE"
