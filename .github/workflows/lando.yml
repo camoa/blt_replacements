@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
       with:
         ref: ${{ github.ref }}
     - name: Setup SSH
@@ -23,7 +23,7 @@ jobs:
         ssh-keyscan -t rsa example.com >> ~/.ssh/known_hosts  # Replace example.com with your SSH host
     - name: Cache Lando
       id: cache-lando
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/lando
         key: ${{ runner.os }}-lando-${{ hashFiles('**/lando/config.yml') }}
@@ -34,7 +34,7 @@ jobs:
     - name: Start Lando
       run: lando start
     - name: Cache Composer dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.composer/cache
         key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
