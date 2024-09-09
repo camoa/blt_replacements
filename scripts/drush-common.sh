@@ -23,12 +23,22 @@ fi
 run_drush_for_multisite() {
   local site_path=$1
   local command=$2
-  echo "Running Drush command for site: $site_path"
-  $DRUSH_CMD --root="$DRUPAL_ROOT" --uri="$site_path" "$command"
+  echo "Running Drush command for site: $site_path: $command"
+  result=$($DRUSH_CMD --root="$DRUPAL_ROOT" --uri="$site_path" "$command" 2>&1)
+  echo "$result"  # Debug statement to see the output
   # Check if the Drush command succeeded
   if [ $? -ne 0 ]; then
     echo "Error: Drush command '$command' failed for site: $site_path"
     exit 1
+  fi
+
+  # Special handling for config-status
+  if [ "$command" == "config-status" ]; then
+    if ! printf "%s" "$result" | grep -q "No differences"; then
+      echo "Error: Config status check failed for site: $site_path"
+      echo "Details: $result"
+      exit 1
+    fi
   fi
 }
 
@@ -67,15 +77,6 @@ DRUSH_COMMANDS=(
 for site in "${MULTISITE_URIS[@]}"; do
   for command in "${DRUSH_COMMANDS[@]}"; do
     run_drush_for_multisite "$site" "$command"
-    # Special handling for config-status
-    if [ "$command" == "config-status" ]; then
-      config_status_output=$($DRUSH_CMD --root="$DRUPAL_ROOT" --uri="$site" config-status)
-      if [[ "$config_status_output" != "No differences" ]]; then
-        echo "Error: Config status check failed for site: $site"
-        echo "Details: $config_status_output"
-        exit 1
-      fi
-    fi
   done
 done
 
