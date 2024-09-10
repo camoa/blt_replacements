@@ -12,6 +12,11 @@ This repository contains a set of automation scripts designed to streamline comm
   - `multisite`
     - `executor.sh` (multi-site version)
 
+
+## Installation
+
+All scripts should be placed in the `scripts` folder at the root directory of your Drupal repository for proper functioning.
+
 ## General Workflow
 
 The main script, `executor.sh`, serves as the orchestrator, determining which specific script to run based on the provided parameters. Depending on the command, it will call one of the following scripts:
@@ -24,10 +29,6 @@ The main script, `executor.sh`, serves as the orchestrator, determining which sp
 ### Single-Site
 
 The single-site version of `executor.sh` operates on the `default` site only. It accepts a command (`pulldb` or `drushcommon`) and an optional environment parameter:
-
-- **Command Examples:**
-  - `./executor.sh pulldb site.dev`
-  - `./executor.sh drushcommon`
 
 ### Multi-Site
 
@@ -88,8 +89,3 @@ Located in `./scripts/modular/drush-common.sh`.
   2. `config-import` (repeated 3 times for safety)
   3. `config-status` (checks if the output contains "No differences")
   4. `cache-rebuild`
-
-## Installation
-
-All scripts should be placed in the `scripts` folder at the root directory of your Drupal repository for proper functioning.
-
