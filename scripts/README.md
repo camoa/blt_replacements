@@ -25,5 +25,5 @@ All scripts should be placed in the `scripts` folder at the root directory of yo
 
 These scripts can be used to pull Db and run the necessary UPDB and CIM commands or just the Drush commands.
 
-[Read the modular scripts README] (modular/README.md)
+[Read the modular scripts README](modular/README.md)
 
