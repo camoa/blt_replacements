@@ -39,7 +39,7 @@ fi
 run_drush_command() {
   local command=$1
   echo "Running Drush command for site: $SITE_URI: $command"
-  result=$($DRUSH_CMD --root="$DRUPAL_ROOT" --uri="$SITE_URI" "$command" 2>&1)
+  result=$($DRUSH_CMD --root="$DRUPAL_ROOT" --uri="$SITE_URI" "$command" -y 2>&1)
   echo "This is the result $result"  # Debug statement to see the output
   # Check if the Drush command succeeded
   if [ $? -ne 0 ]; then
@@ -65,6 +65,7 @@ DRUSH_COMMANDS=(
   "config-import"
   "config-status"
   "cache-rebuild"
+  "deploy:hook"
 )
 
 # Run the Drush commands for the site
