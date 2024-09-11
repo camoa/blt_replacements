@@ -71,6 +71,7 @@ DRUSH_COMMANDS=(
   "config-import"
   "config-status"
   "cache-rebuild"
+  "deploy:hook"
 )
 
 # Run the Drush commands for each detected multisite
