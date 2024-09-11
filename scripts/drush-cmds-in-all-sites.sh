@@ -24,7 +24,7 @@ run_drush_for_multisite() {
   local site_path=$1
   local command=$2
   echo "Running Drush command for site: $site_path: $command"
-  result=$($DRUSH_CMD --root="$DRUPAL_ROOT" --uri="$site_path" "$command" 2>&1)
+  result=$($DRUSH_CMD --root="$DRUPAL_ROOT" --uri="$site_path" "$command" -y 2>&1)
   echo "$result"  # Debug statement to see the output
   # Check if the Drush command succeeded
   if [ $? -ne 0 ]; then
@@ -71,6 +71,7 @@ DRUSH_COMMANDS=(
   "config-import"
   "config-status"
   "cache-rebuild"
+  "deploy:hook"
 )
 
 # Run the Drush commands for each detected multisite
