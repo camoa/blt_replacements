@@ -2,8 +2,9 @@
 #
 # Factory Hook: post-site-install
 #
-# This is necessary to replicate the BLT drupal:install tasks using Drush
+# This is an example script to perform necessary tasks using Drush
 # commands when a site is created on ACSF.
+# Note: This is a starting point and may need customization.
 #
 # Usage: post-site-install.sh sitegroup env db-role domain
 
@@ -11,28 +12,20 @@
 set -ev
 
 # Map the script inputs to convenient names:
-# Acquia Hosting sitegroup (application) and environment.
 sitegroup="$1"
 env="$2"
-# Database role. This is a truly unique identifier for an ACSF site and is e.g.
-# part of the public files path.
 db_role="$3"
-# Internal (Acquia managed) domain name of the website. (No public domain name
-# is assigned yet, immediately after installation.) The first part is a name
-# that is unique per installed site. A small but significant difference with
-# $db_role: if a site gets deleted and reinstalled with the same name, it gets
-# a different $db_role.
 internal_domain="$4"
-# To get only the site name in ${name[0]}:
+
+# Extract site name from the internal domain
 IFS='.' read -a name <<< $internal_domain
 
-# Drush executable:
+# Drush executable
 drush="/mnt/www/html/$sitegroup.$env/vendor/bin/drush"
 
 # Execute the updates using Drush.
 $drush --uri=$internal_domain updatedb -y
 result=$?
-# Exit immediately if a command fails
 [ $result -ne 0 ] && exit $result
 
 $drush --uri=$internal_domain config-import -y
